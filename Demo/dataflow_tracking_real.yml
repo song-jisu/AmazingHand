@@ -19,7 +19,9 @@ nodes:
 
   - id: hand_controller
     build: cargo build -p AHControl
-    path: target/debug/AHControl #--serialport /dev/ttyACM0 --config AHControl/config/r_hand.toml
-    args: --serialport /dev/ttyACM0 --config AHControl/config/r_hand.toml
+    path: target/debug/AHControl
+    # /dev/ah 는 ah_devices.sh 가 만든 고정 이름 (udev 심볼릭 링크).
+    # 없다면 ./ah_devices.sh install 을 먼저 하거나 실제 포트를 직접 적으세요.
+    args: --serialport /dev/ah --config AHControl/config/r_hand.toml
     inputs:
       mj_r_joints_pos: r_hand_simulation/mj_r_joints_pos

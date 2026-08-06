@@ -1,0 +1,32 @@
+# 모터각을 직접 조절해서 실물 오른손을 움직이는 데모 (카메라 불필요)
+#
+# MuJoCo 뷰어 오른쪽 "Control" 패널의 슬라이더 8개가 각 서보의 목표각입니다.
+# 슬라이더를 움직이면 시뮬레이션과 실제 손이 함께 움직입니다.
+# 범위는 MJCF 의 ctrlrange(관절 가동범위 상속) = ±90° 로 클램프됩니다.
+#
+# 실행:
+#   dora build dataflow_motor_real.yml --uv     # 최초 1회
+#   dora run   dataflow_motor_real.yml --uv
+#
+# ⚠ 시작하자마자 hand_controller 가 서보를 config 의 영점 자세로 보냅니다.
+#    처음 돌리기 전에 AHControl/config/r_hand.toml 의 offset 이 실제 조립과
+#    맞는지 확인하세요 (cargo run --bin=set_zeros -- -s /dev/ah -c AHControl/config/r_hand.toml).
+
+nodes:
+  - id: r_hand_simulation
+    build: pip install -e AHSimulation
+    path: AHSimulation/AHSimulation/mj_mink_right.py
+    args: -m motor
+    inputs:
+      tick: dora/timer/millis/2
+      tick_ctrl: dora/timer/millis/10
+    outputs:
+      - mj_r_joints_pos
+
+  - id: hand_controller
+    build: cargo build -p AHControl
+    path: target/debug/AHControl
+    # /dev/ah 는 ah_devices.sh 가 만든 고정 이름 (udev 심볼릭 링크).
+    args: --serialport /dev/ah --config AHControl/config/r_hand.toml
+    inputs:
+      mj_r_joints_pos: r_hand_simulation/mj_r_joints_pos

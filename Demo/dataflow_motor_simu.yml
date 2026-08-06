@@ -1,0 +1,32 @@
+# 모터각을 직접 조절하는 데모 (시뮬레이션 전용, 로봇 없음)
+#
+# MuJoCo 뷰어 오른쪽 "Control" 패널의 슬라이더 8개가 각 서보의 목표각입니다.
+# 슬라이더를 움직이면 손 모양이 그에 맞춰 바뀝니다.
+# 범위는 MJCF 의 ctrlrange(관절 가동범위 상속) = ±90° 입니다.
+#
+# 실행:
+#   dora build dataflow_motor_simu.yml --uv     # 최초 1회
+#   dora run   dataflow_motor_simu.yml --uv
+#
+# 실물 손까지 움직이려면 dataflow_motor_real.yml 을 쓰세요.
+
+nodes:
+  - id: r_hand_simulation
+    build: pip install -e AHSimulation
+    path: AHSimulation/AHSimulation/mj_mink_right.py
+    args: -m motor
+    inputs:
+      tick: dora/timer/millis/2
+      tick_ctrl: dora/timer/millis/10
+    outputs:
+      - mj_r_joints_pos
+
+  - id: l_hand_simulation
+    build: pip install -e AHSimulation
+    path: AHSimulation/AHSimulation/mj_mink_left.py
+    args: -m motor
+    inputs:
+      tick: dora/timer/millis/2
+      tick_ctrl: dora/timer/millis/10
+    outputs:
+      - mj_l_joints_pos

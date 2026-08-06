@@ -1,0 +1,50 @@
+# 모터각을 직접 조절해서 실물 양손을 움직이는 데모 (카메라 불필요)
+#
+# MuJoCo 뷰어가 2개(오른손/왼손) 뜨고, 각 창의 "Control" 패널 슬라이더 8개가
+# 그 손의 서보 목표각입니다. 합쳐서 서보 16개를 직접 조절합니다.
+# 범위는 MJCF 의 ctrlrange(관절 가동범위 상속) = ±90° 로 클램프됩니다.
+#
+# 실행:
+#   dora build dataflow_motor_real_2hands.yml --uv     # 최초 1회
+#   dora run   dataflow_motor_real_2hands.yml --uv
+#
+# ⚠ 전제조건
+#   - 양손 서보 16개가 같은 시리얼 버스에 물려 있어야 합니다.
+#   - AHControl/config/2hands.toml 의 모터 ID 가 실제와 맞아야 합니다.
+#     기본값은 오른손 1~8, 왼손 11~18 입니다 (l_finger4 만 17,18 로 떨어져 있음).
+#     다르면 cargo run --bin=change_id 로 맞추거나 2hands.toml 을 고치세요.
+#   - 시작하자마자 hand_controller 가 서보를 config 의 영점 자세로 보냅니다.
+#     처음이라면 먼저 영점을 확인하세요:
+#       cargo run --bin=set_zeros -- -s /dev/ah -c AHControl/config/2hands.toml
+#
+# 오른손만 쓰려면 dataflow_motor_real.yml 을 쓰세요.
+
+nodes:
+  - id: r_hand_simulation
+    build: pip install -e AHSimulation
+    path: AHSimulation/AHSimulation/mj_mink_right.py
+    args: -m motor
+    inputs:
+      tick: dora/timer/millis/2
+      tick_ctrl: dora/timer/millis/10
+    outputs:
+      - mj_r_joints_pos
+
+  - id: l_hand_simulation
+    build: pip install -e AHSimulation
+    path: AHSimulation/AHSimulation/mj_mink_left.py
+    args: -m motor
+    inputs:
+      tick: dora/timer/millis/2
+      tick_ctrl: dora/timer/millis/10
+    outputs:
+      - mj_l_joints_pos
+
+  - id: hand_controller
+    build: cargo build -p AHControl
+    path: target/debug/AHControl
+    # /dev/ah 는 ah_devices.sh 가 만든 고정 이름 (udev 심볼릭 링크).
+    args: --serialport /dev/ah --config AHControl/config/2hands.toml
+    inputs:
+      mj_r_joints_pos: r_hand_simulation/mj_r_joints_pos
+      mj_l_joints_pos: l_hand_simulation/mj_l_joints_pos
