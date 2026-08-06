@@ -1,5 +1,6 @@
 import argparse
 import os
+import re
 import time
 
 import cv2
@@ -168,13 +169,58 @@ def process_img(hand_proc, image):
 # cv2.imshow('MediaPipe Hands', cv2.flip(image, 1))
 
 
+def resolve_camera():
+    """어느 카메라를 열지 결정한다.
+
+    RealSense 처럼 /dev/video* 를 여러 개 만드는 장치는 0번이 깊이(depth) 노드라
+    열리지 않는다. 우선순위:
+      1) AH_CAMERA 환경변수 (숫자, /dev/videoN 경로, 또는 심볼릭 링크)
+      2) /dev/ahv 심볼릭 링크 (ah_devices.sh install 로 생성)
+      3) 0 (일반 웹캠)
+    """
+    src = os.environ.get("AH_CAMERA") or ("/dev/ahv" if os.path.exists("/dev/ahv") else None)
+    if src is None:
+        return 0
+    if src.isdigit():
+        return int(src)
+    real = os.path.realpath(src)
+    m = re.search(r"(\d+)$", real)
+    if not m:
+        raise RuntimeError(f"카메라 경로에서 번호를 찾을 수 없습니다: {src} -> {real}")
+    return int(m.group(1))
+
+
 def main():
 
     node = Node()
 
 
     pa.array([])  # initialize pyarrow array
-    cap = cv2.VideoCapture(0)
+    cam = resolve_camera()
+    cap = cv2.VideoCapture(cam)
+    if not cap.isOpened():
+        raise RuntimeError(
+            f"카메라를 열 수 없습니다 (index {cam}). "
+            "./ah_devices.sh 로 컬러 영상 노드를 확인하고 AH_CAMERA 로 지정하세요."
+        )
+
+    # 열리기만 하고 프레임이 안 나오는 경우가 있다(USB 대역폭 부족 등).
+    # 그대로 두면 아래 루프가 조용히 continue 만 해서 창이 뜨지 않으므로 여기서 잡는다.
+    # 실패하는 read 는 select() 타임아웃으로 ~10초씩 걸리므로 횟수를 적게 잡는다.
+    for _ in range(3):
+        ok, _frame = cap.read()
+        if ok and _frame is not None:
+            break
+        time.sleep(0.2)
+    else:
+        cap.release()
+        raise RuntimeError(
+            f"카메라 index {cam} 은 열렸지만 프레임이 나오지 않습니다.\n"
+            "  - RealSense 등 USB3 카메라가 USB2 포트에 꽂혀 있지 않은지 확인하세요\n"
+            "    (확인:  cat /sys/bus/usb/devices/*/speed  → 5000 이어야 USB3)\n"
+            "  - ./ah_devices.sh 로 컬러 영상 노드가 맞는지 확인하세요"
+        )
+    print(f"[HandTracking] camera index {cam} ready", flush=True)
 
     with mp_hands.Hands(
             model_complexity=0,
